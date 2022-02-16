@@ -23,7 +23,7 @@ func TestDecisionTreeWithClassification(t *testing.T) {
 		},
 	)
 
-	tree, _ := BuildTreeWithOverfitting(d, ClassificationEvaluator{2})
+	tree, _ := BuildTreeWithOverfitting(d, ClassificationEvaluator{2}, nil)
 
 	tree.Print()
 }
@@ -50,7 +50,7 @@ func TestDecisionTreeWithRegression(t *testing.T) {
 		},
 	)
 
-	tree, _ := BuildTreeWithOverfitting(d, RegressionEvaluator{2})
+	tree, _ := BuildTreeWithOverfitting(d, RegressionEvaluator{2}, nil)
 
 	tree.Print()
 }

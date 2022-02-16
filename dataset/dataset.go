@@ -1,6 +1,22 @@
 package dataset
 
+import "fmt"
+
 type Row []float64
+
+// X is the train data
+func (r Row) X() []float64 {
+	out := []float64{}
+	for i := 0; i < len(r)-1; i++ {
+		out = append(out, r[i])
+	}
+	return out
+}
+
+// Y is the target data
+func (r Row) Y() float64 {
+	return r[len(r)-1]
+}
 
 // Dataset describes rows of data, where each index i into the row repesents
 // data of the same data type.
@@ -19,10 +35,19 @@ type Dataset struct {
 }
 
 type Partition struct {
-	ColumnName string
-	Value      float64
-	False      *Dataset
-	True       *Dataset
+	ColumnIndex  int
+	ColumnName   string
+	Value        float64
+	IsContinuous bool
+	False        *Dataset
+	True         *Dataset
+}
+
+func (p Partition) EvaluateRow(r Row) bool {
+	if p.IsContinuous {
+		return r[p.ColumnIndex] > p.Value
+	}
+	return r[p.ColumnIndex] == p.Value
 }
 
 func NewDataset(names []string, continuous []bool, rows []Row) *Dataset {
@@ -48,7 +73,7 @@ func (d *Dataset) cloneColumns() *Dataset {
 	return NewDataset(d.ColumnNames, d.ColumnIsContinuous, []Row{})
 }
 
-// Partition ask the dataset to partition itself based on the provided
+// PartitionByName ask the dataset to partition itself based on the provided
 // column and "on" value. Partitioning happens like this:
 //
 // If the column being partitioned is continuous, each data point D for the
@@ -66,37 +91,31 @@ func (d *Dataset) cloneColumns() *Dataset {
 // 		false: Dataset <all rows where q.ColumnName evaluated to false>
 //		true: Dataset <all rows where q.ColumnName evaluated to false>
 // }
-func (d *Dataset) Partition(column string, on float64) Partition {
-	p := Partition{
-		ColumnName: column,
-		Value:      on,
-		False:      d.cloneColumns(),
-		True:       d.cloneColumns(),
-	}
-
+func (d *Dataset) PartitionByName(column string, on float64) (*Partition, error) {
 	for i, c := range d.ColumnNames {
-		// we find the column and
 		if column == c {
+			p := Partition{
+				ColumnIndex:  i,
+				ColumnName:   column,
+				IsContinuous: d.ColumnIsContinuous[i],
+				Value:        on,
+				False:        d.cloneColumns(),
+				True:         d.cloneColumns(),
+			}
+
 			for _, row := range d.Rows {
-				if d.ColumnIsContinuous[i] {
-					if row[i] > on {
-						p.True.InsertRow(row)
-					} else {
-						p.False.InsertRow(row)
-					}
+				if p.EvaluateRow(row) {
+					p.True.InsertRow(row)
 				} else {
-					if row[i] == on {
-						p.True.InsertRow(row)
-					} else {
-						p.False.InsertRow(row)
-					}
+					p.False.InsertRow(row)
 				}
 			}
-			break
+
+			return &p, nil
 		}
 	}
 
-	return p
+	return nil, fmt.Errorf("could not find column with name %s", column)
 }
 
 // GiniImpurity is a measure of how often a data point in the set would be
