@@ -13,9 +13,8 @@ type Evaluator interface {
 	// Eval takes the initial dataset and a partition, and outputs a score representing how
 	// well the partition "un-mixes" the data, it's "purity"
 	EvaluateSplit(dataset *dataset.Dataset, partition *dataset.Partition) (*float64, error)
-	// SetSSR formulates and sets a complexity score, based on the data the flowed into
-	// this node during training. We want to minimize this value.
-	SetSSR(root *DecisionNode, node *DecisionNode) error
+	// GetSSR is an error score, based on the data the flowed into this node during training
+	GetSSR(root *DecisionNode) (*float64, error)
 	// Predict return the value that this node predicts
 	Predict(node *DecisionNode) float64
 	// IsBetter tells us if an evaluation is better than other one (sometimes bigger is better,
@@ -61,20 +60,18 @@ func (r RegressionEvaluator) EvaluateSplit(dataset *dataset.Dataset, partition *
 	return &sumSquareResiduals, nil
 }
 
-// SetSSR sets node.SSR, which will later be used during pruning
-func (r RegressionEvaluator) SetSSR(root *DecisionNode, node *DecisionNode) error {
+// GetSSR is an error score, based on the data the flowed into this node during training
+func (r RegressionEvaluator) GetSSR(root *DecisionNode) (*float64, error) {
 	totalError := 0.0
 	for _, row := range root.TrainData.Rows {
 		pred, err := root.Predict(row.X())
 		if err != nil {
-			return err
+			return nil, err
 		}
 		diff := row.Y() - *pred
 		totalError += diff * diff
 	}
-
-	node.SSR = &totalError
-	return nil
+	return &totalError, nil
 }
 
 // Predict returns the average value for data points at this node
@@ -127,24 +124,20 @@ func (c ClassificationEvaluator) EvaluateSplit(dataset *dataset.Dataset, partiti
 	return &infoGain, nil
 }
 
-// SetSSR sets node.CostComplexity = SSR + alpha * |Leaves|
-// In this case, since SSR is just a measure of the error, it will be equal to the
-// number of misclassifications in this node
-func (c ClassificationEvaluator) SetSSR(root *DecisionNode, node *DecisionNode) error {
+// GetSSR is an error score, based on the data the flowed into this node during training
+func (c ClassificationEvaluator) GetSSR(root *DecisionNode) (*float64, error) {
 	totalError := 0.0
 	for _, row := range root.TrainData.Rows {
 		pred, err := root.Predict(row.X())
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		if *pred != row.Y() {
 			totalError += 1
 		}
 	}
-
-	node.SSR = &totalError
-	return nil
+	return &totalError, nil
 }
 
 // Predict returns the class with the largest representation

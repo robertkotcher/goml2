@@ -12,9 +12,29 @@ type DecisionNode struct {
 	Evaluator Evaluator
 	TrainData *dataset.Dataset
 	Partition *dataset.Partition
-	SSR       *float64
 	L         *DecisionNode
 	R         *DecisionNode
+}
+
+// DeepClone ALMOST deep clones this node
+//
+// NOTE: We do not currently clone the partition. This should not be touched after
+// being set.
+func (n *DecisionNode) DeepClone() *DecisionNode {
+	curr := DecisionNode{Evaluator: n.Evaluator, TrainData: n.TrainData}
+	if n.Partition != nil {
+		curr.Partition = n.Partition
+	}
+
+	if n.L != nil {
+		l := n.L.DeepClone()
+		curr.L = l
+	}
+	if n.R != nil {
+		r := n.R.DeepClone()
+		curr.R = r
+	}
+	return &curr
 }
 
 // Predict returns this node's prediction for each of the rows
@@ -47,30 +67,65 @@ func (n *DecisionNode) Predict(row dataset.Row) (*float64, error) {
 	return nextChild.Predict(row)
 }
 
-// BuildTreeWithOverfitting takes a Dataset and PartitionEvaluator and returns a Node that
-// has either 0 or 2 children that represent the most informative split, as decided by
-// the PartitionEvaluator
-//
-// root should be passed as nil - it'll be used during recursion so we can calculate the
-// current (entire) tree's SSR
-func BuildTreeWithOverfitting(ds *dataset.Dataset, evaluator Evaluator, root *DecisionNode) (*DecisionNode, error) {
+// GetSubtreeAndMetrics iteratively steps through the entire tree, asking what the SSR
+// and num leaves would be if each node was the last one that existed at this branch.
+// Returns a list of _all_ possible subtrees, along with their SSRs and numLeaves.
+func GetSubtreesAndMetrics(root, iterNode *DecisionNode, evaluator Evaluator) ([]SubtreeAndMetrics, error) {
+	var lChild, rChild *DecisionNode
+	results := []SubtreeAndMetrics{}
+
+	// pretend that L and R do not exist
+	if iterNode.L != nil {
+		lChild = iterNode.L
+		iterNode.L = nil
+	}
+	if iterNode.R != nil {
+		rChild = iterNode.R
+		iterNode.R = nil
+	}
+
+	// clone and gather metrics
+	ssr, err := evaluator.GetSSR(root)
+	if err != nil {
+		return nil, err
+	}
+
+	results = append(results, SubtreeAndMetrics{
+		Root: root.DeepClone(),
+		SSR:  ssr,
+	})
+
+	// re-attach children and then run recursively on them
+	if lChild != nil {
+		iterNode.L = lChild
+		subResults, err := GetSubtreesAndMetrics(root, lChild, evaluator)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, subResults...)
+	}
+	if rChild != nil {
+		iterNode.R = rChild
+		subResults, err := GetSubtreesAndMetrics(root, rChild, evaluator)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, subResults...)
+	}
+
+	return results, nil
+}
+
+func BuildTreeWithOverfitting(ds *dataset.Dataset, evaluator Evaluator) (*DecisionNode, error) {
 	if ds.Size() == 0 {
 		return nil, fmt.Errorf("cannot initialize a decision tree node without data")
 	}
 
 	outNode := DecisionNode{Evaluator: evaluator, TrainData: ds}
-	if root == nil {
-		root = &outNode
-	}
 
 	// check to see if we have too few leaves to split in this node. this is one way to prevent
 	// over-fitting
 	if ds.Size() < evaluator.GetMinSamplesForSplit() {
-		err := evaluator.SetSSR(root, &outNode) // set SSR on pre-prune (early stop)
-		if err != nil {
-			return nil, err
-		}
-
 		return &outNode, nil
 	}
 
@@ -100,37 +155,26 @@ func BuildTreeWithOverfitting(ds *dataset.Dataset, evaluator Evaluator, root *De
 		}
 	}
 
-	// we only set Partition if there's an informative partition. Partition == nil is a signal
-	// that this is a leaf, and that we should evaluate here.
+	// return because no informative partition
 	if bestPartition.False.Size() == 0 || bestPartition.True.Size() == 0 {
-		err := evaluator.SetSSR(root, &outNode) // set SSR on leaf
-		if err != nil {
-			return nil, err
-		}
-
 		return &outNode, nil
 	}
+
 	outNode.Partition = bestPartition
 
-	// set SSR on internal node _before_ assigning L and R subtrees
-	err := evaluator.SetSSR(root, &outNode)
-	if err != nil {
-		return nil, err
-	}
-
-	// the Left subtree is built from False partition
-	l, err := BuildTreeWithOverfitting(bestPartition.False, evaluator, root)
-	if err != nil {
-		return nil, err
-	}
-	outNode.L = l
-
 	// the Right subtree is built from True partition
-	r, err := BuildTreeWithOverfitting(bestPartition.True, evaluator, root)
+	r, err := BuildTreeWithOverfitting(bestPartition.True, evaluator)
 	if err != nil {
 		return nil, err
 	}
 	outNode.R = r
+
+	// the Left subtree is built from False partition
+	l, err := BuildTreeWithOverfitting(bestPartition.False, evaluator)
+	if err != nil {
+		return nil, err
+	}
+	outNode.L = l
 
 	return &outNode, nil
 }
@@ -148,7 +192,6 @@ func (n *DecisionNode) print(name string, level int) {
 		logrus.Infof("%spartition: <nil>", tabs)
 	}
 	logrus.Infof("%vtrain data: %v", tabs, n.TrainData)
-	logrus.Infof("%vSSR: %f", tabs, *n.SSR)
 	logrus.Info()
 
 	if n.L != nil {
@@ -157,4 +200,10 @@ func (n *DecisionNode) print(name string, level int) {
 	if n.R != nil {
 		n.R.print("R", level+1)
 	}
+}
+
+type SubtreeAndMetrics struct {
+	SSR       *float64
+	NumLeaves int
+	Root      *DecisionNode
 }
