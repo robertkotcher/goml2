@@ -1,3 +1,11 @@
+-- References
+
+https://www.hds.utc.fr/~tdenoeux/dokuwiki/_media/en/trees.pdf
+
+https://www.youtube.com/watch?v=D0efHEJsfHo&t=776s
+
+http://mlwiki.org/index.php/Cost-Complexity_Pruning
+
 -- k-fold cross validation
 
     Returns a model trained on _all_ of the training data

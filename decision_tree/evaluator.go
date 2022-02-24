@@ -13,8 +13,8 @@ type Evaluator interface {
 	// Eval takes the initial dataset and a partition, and outputs a score representing how
 	// well the partition "un-mixes" the data, it's "purity"
 	EvaluateSplit(dataset *dataset.Dataset, partition *dataset.Partition) (*float64, error)
-	// GetSSR is an error score, based on the data the flowed into this node during training
-	GetSSR(root *DecisionNode) (*float64, error)
+	// GetErrorAtNode is an error score, based on the data the flowed into this node during training
+	GetErrorAtNode(root *DecisionNode) (*float64, error)
 	// Predict return the value that this node predicts
 	Predict(node *DecisionNode) float64
 	// IsBetter tells us if an evaluation is better than other one (sometimes bigger is better,
@@ -60,11 +60,11 @@ func (r RegressionEvaluator) EvaluateSplit(dataset *dataset.Dataset, partition *
 	return &sumSquareResiduals, nil
 }
 
-// GetSSR is an error score, based on the data the flowed into this node during training
-func (r RegressionEvaluator) GetSSR(root *DecisionNode) (*float64, error) {
+// GetErrorAtNode evaluates the sum of squared residuals for regression node
+func (r RegressionEvaluator) GetErrorAtNode(node *DecisionNode) (*float64, error) {
 	totalError := 0.0
-	for _, row := range root.TrainData.Rows {
-		pred, err := root.Predict(row.X())
+	for _, row := range node.TrainData.Rows {
+		pred, err := node.Predict(row.X())
 		if err != nil {
 			return nil, err
 		}
@@ -124,19 +124,18 @@ func (c ClassificationEvaluator) EvaluateSplit(dataset *dataset.Dataset, partiti
 	return &infoGain, nil
 }
 
-// GetSSR is an error score, based on the data the flowed into this node during training
-func (c ClassificationEvaluator) GetSSR(root *DecisionNode) (*float64, error) {
-	totalError := 0.0
-	for _, row := range root.TrainData.Rows {
-		pred, err := root.Predict(row.X())
-		if err != nil {
-			return nil, err
-		}
+// GetErrorAtNode is the total number of misclassified data points at this node divided
+// by the total data points that reached this node during training
+func (c ClassificationEvaluator) GetErrorAtNode(node *DecisionNode) (*float64, error) {
+	nodeClass := node.Evaluator.Predict(node)
 
-		if *pred != row.Y() {
+	totalError := 0.0
+	for _, row := range node.TrainData.Rows {
+		if nodeClass != row.Y() {
 			totalError += 1
 		}
 	}
+	totalError = totalError / float64(node.TrainData.Size())
 	return &totalError, nil
 }
 
