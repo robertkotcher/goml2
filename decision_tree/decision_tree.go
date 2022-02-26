@@ -269,7 +269,8 @@ func (n *DecisionNode) print(name string, level int) {
 	} else {
 		logrus.Infof("%spartition: <nil>", tabs)
 	}
-	logrus.Infof("%vtrain data: %v", tabs, n.TrainData)
+	// logrus.Infof("%vtrain data: %v", tabs, n.TrainData)
+	logrus.Infof("%vprediction: %v", tabs, n.Evaluator.Predict(n))
 	logrus.Info()
 
 	if n.L != nil {

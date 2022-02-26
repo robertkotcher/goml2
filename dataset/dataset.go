@@ -1,22 +1,11 @@
 package dataset
 
-import "fmt"
-
-type Row []float64
-
-// X is the train data
-func (r Row) X() []float64 {
-	out := []float64{}
-	for i := 0; i < len(r)-1; i++ {
-		out = append(out, r[i])
-	}
-	return out
-}
-
-// Y is the target data
-func (r Row) Y() float64 {
-	return r[len(r)-1]
-}
+import (
+	"encoding/csv"
+	"fmt"
+	"os"
+	"strconv"
+)
 
 // Dataset describes rows of data, where each index i into the row repesents
 // data of the same data type.
@@ -29,29 +18,103 @@ func (r Row) Y() float64 {
 //
 // Enums must be converted to integers before being used.
 type Dataset struct {
+	EnumMapper         *EnumMapper
 	ColumnNames        []string
 	ColumnIsContinuous []bool
 	Rows               []Row
 }
 
-type Partition struct {
-	ColumnIndex  int
-	ColumnName   string
-	Value        float64
-	IsContinuous bool
-	False        *Dataset
-	True         *Dataset
-}
+// columnIndex and columnIsCont are used to help build datsets from CSV files.
+// see ColumnsToInclude for more information
+// columnName is used to pull the numeric value in enum mapper
+type columnIndex int
+type columnIsCont bool
 
-func (p Partition) EvaluateRow(r Row) bool {
-	if p.IsContinuous {
-		return r[p.ColumnIndex] > p.Value
+// ColumnsToInclude is a data structure that helps us build a dataset from a
+// CSV file. By including a columnIndex in the map, this column will be included
+// in the dataset. columnIsCont tells us whether or not the data is categorical
+type ColumnsToInclude map[columnIndex]columnIsCont
+
+// BuildDatasetFromCSV builds a dataset, where each row looks like:
+// [prop0, prop1, ..., propN, target]
+// we can extract X and Y using row.X() and row.Y()
+func BuildDatasetFromCSV(filepath string, cti ColumnsToInclude, targetC columnIndex) (*Dataset, error) {
+	columnIndices := []int{}     // fill with indices so we know how to build rows
+	columnContinuous := []bool{} // fill with isContinuous values
+	columnNames := []string{}    // fill with names of each column
+	targetColumn := -1           // cache target index so we add it last
+	targetContinuous := false
+
+	for cIndex, isCont := range cti {
+		if cIndex == targetC {
+			targetColumn = int(cIndex)
+			targetContinuous = bool(isCont)
+		} else {
+			columnIndices = append(columnIndices, int(cIndex))
+			columnContinuous = append(columnContinuous, bool(isCont))
+		}
 	}
-	return r[p.ColumnIndex] == p.Value
+
+	if targetColumn == -1 {
+		return nil, fmt.Errorf("you must include target column in ColumnsToInclude")
+	}
+	columnIndices = append(columnIndices, targetColumn)
+	columnContinuous = append(columnContinuous, targetContinuous)
+	// END figuring out index template - we'll use this iteratively to build rows
+
+	// load file
+	f, err := os.Open("TitanicTrain.csv")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	csvReader := csv.NewReader(f)
+	data, err := csvReader.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	// file columnNames
+	for _, i := range columnIndices {
+		columnNames = append(columnNames, data[0][i])
+	}
+
+	// we need to fill enum mappings
+	e := EnumMapper{}
+	for r := 1; r < len(data); r++ {
+		for c := 0; c < len(columnIndices); c++ {
+			if !columnContinuous[c] {
+				e.Insert(columnNames[c], data[r][columnIndices[c]])
+			}
+		}
+	}
+
+	// now that we have the map, iterate through rows again and construct Rows
+	rows := []Row{}
+	for r := 1; r < len(data); r++ {
+		var newRow Row
+		for c := 0; c < len(columnIndices); c++ {
+			if columnContinuous[c] {
+				fl, err := strconv.ParseFloat(data[r][c], 64)
+				if err != nil {
+					return nil, fmt.Errorf("error parsing row %d col %d", r, c)
+				}
+				newRow = append(newRow, fl)
+			} else {
+				newRow = append(newRow, e.LookupNumFromName(columnNames[c], data[r][columnIndices[c]]))
+			}
+		}
+		rows = append(rows, newRow)
+	}
+
+	ds := NewDataset(columnNames, columnContinuous, rows, &e)
+	return ds, nil
 }
 
-func NewDataset(names []string, continuous []bool, rows []Row) *Dataset {
+func NewDataset(names []string, continuous []bool, rows []Row, e *EnumMapper) *Dataset {
 	return &Dataset{
+		EnumMapper:         e,
 		ColumnNames:        names,
 		ColumnIsContinuous: continuous,
 		Rows:               rows,
@@ -70,7 +133,7 @@ func (d *Dataset) Size() int {
 
 // cloneColumns creates a new dataset with the same columns and types
 func (d *Dataset) cloneColumns() *Dataset {
-	return NewDataset(d.ColumnNames, d.ColumnIsContinuous, []Row{})
+	return NewDataset(d.ColumnNames, d.ColumnIsContinuous, []Row{}, d.EnumMapper)
 }
 
 // PartitionByName ask the dataset to partition itself based on the provided
