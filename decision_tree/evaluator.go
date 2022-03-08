@@ -15,6 +15,8 @@ type Evaluator interface {
 	EvaluateSplit(dataset *dataset.Dataset, partition *dataset.Partition) (*float64, error)
 	// GetErrorAtNode is an error score, based on the data the flowed into this node during training
 	GetErrorAtNode(root *DecisionNode) (*float64, error)
+	// GetSingleError returns the contribution towards a node's error from a single prediction
+	GetSingleError(actual, predicted float64) float64
 	// Predict return the value that this node predicts
 	Predict(node *DecisionNode) float64
 	// IsBetter tells us if an evaluation is better than other one (sometimes bigger is better,
@@ -68,10 +70,14 @@ func (r RegressionEvaluator) GetErrorAtNode(node *DecisionNode) (*float64, error
 		if err != nil {
 			return nil, err
 		}
-		diff := row.Y() - *pred
-		totalError += diff * diff
+		totalError += r.GetSingleError(row.Y(), *pred)
 	}
 	return &totalError, nil
+}
+
+// GetSingleError returns the squared residual
+func (r RegressionEvaluator) GetSingleError(actual, predicted float64) float64 {
+	return (actual - predicted) * (actual - predicted)
 }
 
 // Predict returns the average value for data points at this node
@@ -80,7 +86,7 @@ func (r RegressionEvaluator) Predict(node *DecisionNode) float64 {
 	for _, dp := range node.TrainData.Rows {
 		total += dp.Y()
 	}
-	return total / float64(len(node.TrainData.Rows))
+	return total / float64(node.TrainData.Size())
 }
 
 func (r RegressionEvaluator) IsBetter(newScore, oldScore float64) bool {
@@ -137,6 +143,14 @@ func (c ClassificationEvaluator) GetErrorAtNode(node *DecisionNode) (*float64, e
 	}
 	totalError = totalError / float64(node.TrainData.Size())
 	return &totalError, nil
+}
+
+// GetSingleError returns 0 if actual equals predicted, and 1 otherwise
+func (c ClassificationEvaluator) GetSingleError(actual, predicted float64) float64 {
+	if actual == predicted {
+		return 0
+	}
+	return 1
 }
 
 // Predict returns the class with the largest representation

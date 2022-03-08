@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+
+	"github.com/sirupsen/logrus"
 )
 
 // Dataset describes rows of data, where each index i into the row repesents
@@ -29,41 +31,19 @@ type Dataset struct {
 // columnName is used to pull the numeric value in enum mapper
 type columnIndex int
 type columnIsCont bool
+type columnName string
 
 // ColumnsToInclude is a data structure that helps us build a dataset from a
 // CSV file. By including a columnIndex in the map, this column will be included
 // in the dataset. columnIsCont tells us whether or not the data is categorical
-type ColumnsToInclude map[columnIndex]columnIsCont
+type ColumnsToInclude map[columnName]columnIsCont
 
 // BuildDatasetFromCSV builds a dataset, where each row looks like:
 // [prop0, prop1, ..., propN, target]
 // we can extract X and Y using row.X() and row.Y()
-func BuildDatasetFromCSV(filepath string, cti ColumnsToInclude, targetC columnIndex) (*Dataset, error) {
-	columnIndices := []int{}     // fill with indices so we know how to build rows
-	columnContinuous := []bool{} // fill with isContinuous values
-	columnNames := []string{}    // fill with names of each column
-	targetColumn := -1           // cache target index so we add it last
-	targetContinuous := false
-
-	for cIndex, isCont := range cti {
-		if cIndex == targetC {
-			targetColumn = int(cIndex)
-			targetContinuous = bool(isCont)
-		} else {
-			columnIndices = append(columnIndices, int(cIndex))
-			columnContinuous = append(columnContinuous, bool(isCont))
-		}
-	}
-
-	if targetColumn == -1 {
-		return nil, fmt.Errorf("you must include target column in ColumnsToInclude")
-	}
-	columnIndices = append(columnIndices, targetColumn)
-	columnContinuous = append(columnContinuous, targetContinuous)
-	// END figuring out index template - we'll use this iteratively to build rows
-
+func BuildDatasetFromCSV(filepath string, cti ColumnsToInclude, targetC columnName) (*Dataset, error) {
 	// load file
-	f, err := os.Open("TitanicTrain.csv")
+	f, err := os.Open(filepath)
 	if err != nil {
 		return nil, err
 	}
@@ -74,11 +54,53 @@ func BuildDatasetFromCSV(filepath string, cti ColumnsToInclude, targetC columnIn
 	if err != nil {
 		return nil, err
 	}
-
-	// file columnNames
-	for _, i := range columnIndices {
-		columnNames = append(columnNames, data[0][i])
+	colNameToIdx := map[string]int{}
+	for c, cName := range data[0] {
+		colNameToIdx[cName] = c
 	}
+
+	columnIndices := []int{}     // fill with indices so we know how to build rows
+	columnContinuous := []bool{} // fill with isContinuous values
+	columnNames := []string{}    // fill with names of each column
+	targetColumn := -1           // cache target index so we add it last
+	targetContinuous := false
+
+	// verify that we didn't pass a non-existant key in cti
+	for k := range cti {
+		var found bool
+		for _, cName := range data[0] {
+			if columnName(cName) == k {
+				found = true
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("column %s does not exist in dataset", k)
+		}
+	}
+
+	// fill columnNames and columnIndices
+	for n, i := range colNameToIdx {
+		nm := columnName(n)
+		isCont, ok := cti[columnName(n)]
+		if ok {
+			if nm == targetC {
+				targetColumn = i
+				targetContinuous = bool(isCont)
+			} else {
+				columnNames = append(columnNames, n)
+				columnIndices = append(columnIndices, i)
+				columnContinuous = append(columnContinuous, bool(isCont))
+			}
+		}
+	}
+
+	if targetColumn == -1 {
+		return nil, fmt.Errorf("you must include target column in ColumnsToInclude")
+	}
+	columnNames = append(columnNames, string(targetC))
+	columnIndices = append(columnIndices, targetColumn)
+	columnContinuous = append(columnContinuous, targetContinuous)
+	// END figuring out index template - we'll use this iteratively to build rows
 
 	// we need to fill enum mappings
 	e := EnumMapper{}
@@ -92,21 +114,32 @@ func BuildDatasetFromCSV(filepath string, cti ColumnsToInclude, targetC columnIn
 
 	// now that we have the map, iterate through rows again and construct Rows
 	rows := []Row{}
-	for r := 1; r < len(data); r++ {
+	var numSkipped int
+	for row := 1; row < len(data); row++ {
 		var newRow Row
+		includeRow := true
 		for c := 0; c < len(columnIndices); c++ {
+			col := columnIndices[c]
+			val := data[row][col]
 			if columnContinuous[c] {
-				fl, err := strconv.ParseFloat(data[r][c], 64)
+				fl, err := strconv.ParseFloat(val, 64)
 				if err != nil {
-					return nil, fmt.Errorf("error parsing row %d col %d", r, c)
+					// logrus.Warnf("skipping row %d. error parsing \"%v\" (row %d col %d)", row, val, row, col)
+					numSkipped += 1
+					includeRow = false
+				} else {
+					newRow = append(newRow, fl)
 				}
-				newRow = append(newRow, fl)
 			} else {
-				newRow = append(newRow, e.LookupNumFromName(columnNames[c], data[r][columnIndices[c]]))
+				newRow = append(newRow, e.LookupNumFromName(columnNames[c], val))
 			}
 		}
-		rows = append(rows, newRow)
+		if includeRow {
+			rows = append(rows, newRow)
+		}
 	}
+
+	logrus.Infof("finished building dataset. skipped %d records", numSkipped)
 
 	ds := NewDataset(columnNames, columnContinuous, rows, &e)
 	return ds, nil
@@ -181,24 +214,27 @@ func (d *Dataset) PartitionByName(column string, on float64) (*Partition, error)
 	return nil, fmt.Errorf("could not find column with name %s", column)
 }
 
-// GiniImpurity is a measure of how often a data point in the set would be
-// _incorrectly_ labeled if a random label from the set was assigned to
-// a data point in the set.
-//
-// Used by CART (classification and regression tree) algorithms
-func (d *Dataset) GiniImpurity() float64 {
-	classes := map[float64]float64{}
+// CrossValidationSets returns pointer to 10 training sets and 10 corresponding test sets
+func (d *Dataset) CrossValidationSets() (trainsets *[10]Dataset, testsets *[10]Dataset, err error) {
+	trainsets = &[10]Dataset{}
+	testsets = &[10]Dataset{}
 
-	for _, r := range d.Rows {
-		label := r[len(r)-1]
-		classes[label] += 1.0
+	nTest := int(d.Size() / 10)
+
+	for s := 0; s < 10; s++ {
+		testStartIdx := (s * nTest)        // include start
+		testEndIdx := testStartIdx + nTest // exclude end
+
+		trainsets[s] = *d.cloneColumns()
+		testsets[s] = *d.cloneColumns()
+		for r, row := range d.Rows {
+			if r >= testStartIdx && r < testEndIdx { // include in test set
+				testsets[s].InsertRow(row)
+			} else { // include in train set
+				trainsets[s].InsertRow(row)
+			}
+		}
 	}
 
-	impurity := 1.0
-	for label := range classes {
-		ratio := classes[label] / float64(d.Size())
-		impurity -= (ratio * ratio)
-	}
-
-	return impurity
+	return trainsets, testsets, nil
 }

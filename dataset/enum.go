@@ -25,6 +25,6 @@ func (e *EnumMapper) LookupNumFromName(typ, instance string) float64 {
 			return float64(i)
 		}
 	}
-	logrus.Fatal("could not look up %s.%s in enum mapper", typ, instance)
+	logrus.Fatalf("could not look up %s.%s in enum mapper", typ, instance)
 	return -1
 }

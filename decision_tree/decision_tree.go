@@ -2,6 +2,7 @@ package decision_tree
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -77,6 +78,63 @@ func BuildTreeWithOverfitting(ds *dataset.Dataset, evaluator Evaluator) (*Decisi
 	outNode.L = l
 
 	return &outNode, nil
+}
+
+// GetAlphaIndexFromCrossValidation splits the training data into 10 folds, i.e. into
+// 10 groups of train/test subsets. For each training set, we build trees and alpha, and
+// determine which tree performs best. In the end, we average the 10 best alphas and determine
+// which alpha it's closet to in the incoming 'alphas' slice, returning the index. This index
+// can be used to select a tree constructed from _all_ of the training data, pruned with
+// cost-complexity pruning.
+func GetAlphaIndexFromCrossValidation(alphas []float64, ds *dataset.Dataset, evaluator Evaluator) (*int, error) {
+	// (1) build trainsets, testsets - each has 10 items
+	trainsets, testsets, err := ds.CrossValidationSets()
+	if err != nil {
+		return nil, err
+	}
+
+	sumalphas := 0.0
+	for i, trainset := range trainsets {
+		testset := testsets[i]
+
+		// build tree with training set
+		tree, _ := BuildTreeWithOverfitting(&trainset, evaluator)
+		subtrees, alphas, err := tree.GetSubtreesAndAlphas()
+		if err != nil {
+			return nil, err
+		}
+
+		// evaluate subtrees with test set
+		lowesterr := math.MaxFloat64
+		lowestalpha := math.MaxFloat64
+		for j, st := range *subtrees {
+			sterr := 0.0
+			for _, testrow := range testset.Rows {
+				pred, err := st.Predict(testrow.X())
+				if err != nil {
+					return nil, err
+				}
+
+				sterr += evaluator.GetSingleError(*pred, testrow.Y())
+			}
+			if sterr < lowesterr {
+				lowesterr = sterr
+				lowestalpha = (*alphas)[j]
+			}
+		}
+		sumalphas += lowestalpha
+	}
+	averageAlpha := sumalphas / 10.0
+
+	// find the alpha that we're closest to from passed alphas
+	for a, alpha := range alphas {
+		if averageAlpha <= alpha {
+			// if best alpha is 0 (lowest possible), then we'll hit it at index 0
+			return &a, nil
+		}
+	}
+
+	return nil, fmt.Errorf("average alpha during cross validation was greater than all eligible alphas")
 }
 
 // GetSubtreesAndAlphas builds a list of subtrees and the alphas that would be required
@@ -186,7 +244,7 @@ func getSubtreesAndAlphas(root, iterNode *DecisionNode) (*DecisionNode, *float64
 func (n *DecisionNode) Predict(row dataset.Row) (*float64, error) {
 	expectedNumCols := len(n.TrainData.Rows[0]) - 1
 	if len(row) != expectedNumCols {
-		return nil, fmt.Errorf("could not predict, expected %d columns", expectedNumCols)
+		return nil, fmt.Errorf("could not predict, expected %d columns, had %d", expectedNumCols, len(row))
 	}
 
 	if n.Partition == nil { // base case 1 - there are no parititions at all (leaf)
@@ -271,6 +329,8 @@ func (n *DecisionNode) print(name string, level int) {
 	}
 	// logrus.Infof("%vtrain data: %v", tabs, n.TrainData)
 	logrus.Infof("%vprediction: %v", tabs, n.Evaluator.Predict(n))
+	logrus.Infof("%vnum leaf: %d", tabs, n.TrainData.Size())
+	logrus.Infof("%simpurity: %f", tabs, n.TrainData.GiniImpurity())
 	logrus.Info()
 
 	if n.L != nil {
