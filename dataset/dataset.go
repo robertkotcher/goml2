@@ -227,6 +227,9 @@ func (d *Dataset) CrossValidationSets() (trainsets *[10]Dataset, testsets *[10]D
 
 	nTest := int(d.Size() / 10)
 
+	logrus.Warn(d.Size())
+	logrus.Warn(nTest)
+
 	for s := 0; s < 10; s++ {
 		testStartIdx := (s * nTest)        // include start
 		testEndIdx := testStartIdx + nTest // exclude end

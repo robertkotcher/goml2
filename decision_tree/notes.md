@@ -126,3 +126,43 @@ INFO[0005] * fold 9: alpha 1.0796900584795321, error: 534.8713367940638
 ## Stack overflow question:
 
 [Why does each fold return such different results?](https://datascience.stackexchange.com/questions/109070/regression-tree-cross-validation-confusing-results)
+
+# verification of classification tree using titanic housing dataset
+
+The alphas returned from the cost-complexity pruning algorithm correspond to trees that have the following average residuals across the _training_ dataset.
+
+INFO[0004] alpha 8.673617379884035e-19, num misclassified 86 
+INFO[0004] alpha 1.734723475976807e-18, num misclassified 86 
+INFO[0004] alpha 0.00023342670401494078, num misclassified 87 
+INFO[0004] alpha 0.00040016006402561005, num misclassified 89 
+INFO[0004] alpha 0.000700280112044818, num misclassified 90 
+INFO[0004] alpha 0.0007002801120448189, num misclassified 91 
+INFO[0004] alpha 0.0009337068160597539, num misclassified 93 
+INFO[0004] alpha 0.0014005602240896343, num misclassified 94 
+INFO[0004] alpha 0.0014005602240896352, num misclassified 96 
+INFO[0004] alpha 0.0014005602240896356, num misclassified 97 
+INFO[0004] alpha 0.001400560224089636, num misclassified 98 
+INFO[0004] alpha 0.001400560224089636, num misclassified 100 
+INFO[0004] alpha 0.001400560224089637, num misclassified 101 
+INFO[0004] alpha 0.0026260504201680666, num misclassified 116 
+INFO[0004] alpha 0.0028011204481792704, num misclassified 118 
+INFO[0004] alpha 0.002801120448179272, num misclassified 122 
+INFO[0005] alpha 0.003326330532212883, num misclassified 141 
+INFO[0005] alpha 0.011204481792717075, num misclassified 149 
+INFO[0005] alpha 0.011204481792717089, num misclassified 157 
+INFO[0005] alpha 0.1862745098039216, num misclassified 290
+
+Running cross-validation returns the following best alphas and errors:
+
+INFO[0000] * fold 0: alpha 0, error: 17                 
+INFO[0001] * fold 1: alpha 0.0006912044237083108, error: 12 
+INFO[0001] * fold 2: alpha 0.0015552099533437036, error: 6 
+INFO[0002] * fold 3: alpha 0.0005832037325038881, error: 11 
+INFO[0003] * fold 4: alpha -8.673617379884035e-19, error: 12 
+INFO[0003] * fold 5: alpha 0, error: 18                 
+INFO[0003] * fold 6: alpha 8.673617379884035e-19, error: 9 
+INFO[0004] * fold 7: alpha 0, error: 15                 
+INFO[0004] * fold 8: alpha 0.013996889580093305, error: 9 
+INFO[0004] * fold 9: alpha 0.0015552099533436992, error: 13
+
+Similarly to regression, the results from cross validation seem to be a bit all over the place. At the moment, it's not clear that this is wrong - it might just be due to the volatility of tree structure during tree construction. To investigate further.

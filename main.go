@@ -36,6 +36,17 @@ func buildTitanicDecisionTree() {
 	logrus.Infof("tree with alpha %f", (*alphas)[len(*trees)-1])
 	winner := (*trees)[*idx]
 	winner.Print()
+
+	for i, t := range *trees {
+		totres := 0.0
+		for _, r := range ds.Rows {
+			o, _ := t.Predict(r.X())
+			if *o != r.Y() {
+				totres += 1.0
+			}
+		}
+		logrus.Infof("alpha %v, num misclassified %v", (*alphas)[i], totres)
+	}
 }
 
 func buildBostonDecisionTree() {
@@ -75,36 +86,33 @@ func buildBostonDecisionTree() {
 	trees, alphas, err := tree.GetSubtreesAndAlphas()
 	logrus.Warn(err)
 
-	// print largest alpha
+	idx, err := decision_tree.GetAlphaIndexFromCrossValidation(*alphas, ds, classifier)
+	if err != nil {
+		logrus.Error(err)
+	}
+
 	logrus.Infof("tree with alpha %f", (*alphas)[len(*trees)-1])
-	(*trees)[len(*trees)-1].Print()
-
-	// print second largest alpha
-	logrus.Infof("tree with alpha %f", (*alphas)[len(*trees)-2])
-	(*trees)[len(*trees)-2].Print()
-
-	// print 3rd largest alpha
-	logrus.Infof("tree with alpha %f", (*alphas)[len(*trees)-3])
-	(*trees)[len(*trees)-3].Print()
+	winner := (*trees)[*idx]
+	winner.Print()
 
 	// print key
 	logrus.Info("Enum mapper:")
 	logrus.Info(*ds.EnumMapper)
 
-	for i, t := range *trees {
-		totres := 0.0
-		for _, r := range ds.Rows {
-			o, _ := t.Predict(r.X())
-			totres += ((*o) - r.Y()) * ((*o) - r.Y())
-		}
-		totres = totres / float64(ds.Size())
-		logrus.Infof("alpha %v, avg residual %v", (*alphas)[i], totres)
-	}
+	// for i, t := range *trees {
+	// 	totres := 0.0
+	// 	for _, r := range ds.Rows {
+	// 		o, _ := t.Predict(r.X())
+	// 		totres += ((*o) - r.Y()) * ((*o) - r.Y())
+	// 	}
+	// 	totres = totres / float64(ds.Size())
+	// 	logrus.Infof("alpha %v, avg residual %v", (*alphas)[i], totres)
+	// }
 
 	decision_tree.GetAlphaIndexFromCrossValidation(*alphas, ds, classifier)
 }
 
 func main() {
-	buildBostonDecisionTree()
-	// buildTitanicDecisionTree()
+	// buildBostonDecisionTree()
+	buildTitanicDecisionTree()
 }
