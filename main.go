@@ -67,7 +67,7 @@ func buildBostonDecisionTree() {
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	logrus.Info("variance: %v", v)
+	logrus.Infof("variance: %v", v)
 
 	classifier := decision_tree.RegressionEvaluator{10}
 

@@ -122,3 +122,7 @@ INFO[0004] * fold 6: alpha 17.46343440122044, error: 1063.6356448669746
 INFO[0004] * fold 7: alpha 32.8669200779727, error: 2693.1774483892314  
 INFO[0005] * fold 8: alpha 4.16376096491228, error: 809.8810069806822  
 INFO[0005] * fold 9: alpha 1.0796900584795321, error: 534.8713367940638  
+
+## Stack overflow question:
+
+[Why does each fold return such different results?](https://datascience.stackexchange.com/questions/109070/regression-tree-cross-validation-confusing-results)
