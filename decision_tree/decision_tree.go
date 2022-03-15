@@ -87,6 +87,8 @@ func BuildTreeWithOverfitting(ds *dataset.Dataset, evaluator Evaluator) (*Decisi
 // can be used to select a tree constructed from _all_ of the training data, pruned with
 // cost-complexity pruning.
 func GetAlphaIndexFromCrossValidation(alphas []float64, ds *dataset.Dataset, evaluator Evaluator) (*int, error) {
+	ds.Shuffle()
+
 	// (1) build trainsets, testsets - each has 10 items
 	trainsets, testsets, err := ds.CrossValidationSets()
 	if err != nil {
@@ -117,11 +119,14 @@ func GetAlphaIndexFromCrossValidation(alphas []float64, ds *dataset.Dataset, eva
 
 				sterr += evaluator.GetSingleError(*pred, testrow.Y())
 			}
+			// logrus.Infof("fold %d: alpha %v, error: %v", i, (*alphas)[j], sterr)
+
 			if sterr < lowesterr {
 				lowesterr = sterr
 				lowestalpha = (*alphas)[j]
 			}
 		}
+		logrus.Infof("* fold %d: alpha %v, error: %v", i, lowestalpha, lowesterr)
 		sumalphas += lowestalpha
 	}
 	averageAlpha := sumalphas / 10.0

@@ -18,6 +18,8 @@ func buildTitanicDecisionTree() {
 		logrus.Error(err)
 	}
 
+	ds.Shuffle()
+
 	classifier := decision_tree.ClassificationEvaluator{10}
 
 	tree, _ := decision_tree.BuildTreeWithOverfitting(ds, classifier)
@@ -43,7 +45,6 @@ func buildBostonDecisionTree() {
 		"indus": true,
 		"rm":    true,
 		"age":   true,
-		"tax":   true,
 		"medv":  true,
 	}
 
@@ -89,6 +90,18 @@ func buildBostonDecisionTree() {
 	// print key
 	logrus.Info("Enum mapper:")
 	logrus.Info(*ds.EnumMapper)
+
+	for i, t := range *trees {
+		totres := 0.0
+		for _, r := range ds.Rows {
+			o, _ := t.Predict(r.X())
+			totres += ((*o) - r.Y()) * ((*o) - r.Y())
+		}
+		totres = totres / float64(ds.Size())
+		logrus.Infof("alpha %v, avg residual %v", (*alphas)[i], totres)
+	}
+
+	decision_tree.GetAlphaIndexFromCrossValidation(*alphas, ds, classifier)
 }
 
 func main() {

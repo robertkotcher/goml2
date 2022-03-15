@@ -3,8 +3,10 @@ package dataset
 import (
 	"encoding/csv"
 	"fmt"
+	"math/rand"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -152,6 +154,10 @@ func NewDataset(names []string, continuous []bool, rows []Row, e *EnumMapper) *D
 		ColumnIsContinuous: continuous,
 		Rows:               rows,
 	}
+}
+func (d *Dataset) Shuffle() {
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(d.Rows), func(i, j int) { d.Rows[i], d.Rows[j] = d.Rows[j], d.Rows[i] })
 }
 
 // InsertRow inserts a new row into d
