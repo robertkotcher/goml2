@@ -137,9 +137,7 @@ func (c ClassificationEvaluator) GetErrorAtNode(node *DecisionNode) (*float64, e
 
 	totalError := 0.0
 	for _, row := range node.TrainData.Rows {
-		if nodeClass != row.Y() {
-			totalError += 1
-		}
+		totalError += c.GetSingleError(row.Y(), nodeClass)
 	}
 	totalError = totalError / float64(node.TrainData.Size())
 	return &totalError, nil
