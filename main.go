@@ -6,6 +6,27 @@ import (
 	"robertkotcher.me/ML2022/decision_tree"
 )
 
+func runPresentation0() {
+	colData := dataset.ColumnsToInclude{
+		"furry":  false,
+		"length": true,
+		"class":  false,
+	}
+	ds, err := dataset.BuildDatasetFromCSV("presentation_0.csv", colData, "class")
+	if err != nil {
+		logrus.Error(err)
+	}
+	ds.Shuffle()
+
+	logrus.Info("Enum mapper:")
+	logrus.Info(*ds.EnumMapper)
+
+	classifier := decision_tree.ClassificationEvaluator{1}
+
+	tree, _ := decision_tree.BuildTreeWithOverfitting(ds, classifier)
+	tree.Print()
+}
+
 func buildTitanicDecisionTree() {
 	colData := dataset.ColumnsToInclude{
 		"Pclass":   true,
@@ -113,6 +134,7 @@ func buildBostonDecisionTree() {
 }
 
 func main() {
+	runPresentation0()
 	// buildBostonDecisionTree()
-	buildTitanicDecisionTree()
+	// buildTitanicDecisionTree()
 }
