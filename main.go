@@ -4,6 +4,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"robertkotcher.me/ML2022/dataset"
 	"robertkotcher.me/ML2022/decision_tree"
+	ptr "robertkotcher.me/ML2022/util"
 )
 
 func runPresentation0() {
@@ -21,9 +22,12 @@ func runPresentation0() {
 	logrus.Info("Enum mapper:")
 	logrus.Info(*ds.EnumMapper)
 
-	classifier := decision_tree.ClassificationEvaluator{1}
+	evaluator := decision_tree.ClassificationEvaluator{}
+	options := decision_tree.BuildOptions{
+		MinSamplesForSplit: ptr.PointToInt(1),
+	}
 
-	tree, _ := decision_tree.BuildTreeWithOverfitting(ds, classifier)
+	tree, _ := decision_tree.BuildTreeWithOverfitting(ds, evaluator, options)
 	tree.Print()
 }
 
@@ -41,15 +45,18 @@ func buildTitanicDecisionTree() {
 
 	ds.Shuffle()
 
-	classifier := decision_tree.ClassificationEvaluator{10}
+	evaluator := decision_tree.ClassificationEvaluator{}
+	options := decision_tree.BuildOptions{
+		MinSamplesForSplit: ptr.PointToInt(10),
+	}
 
-	tree, _ := decision_tree.BuildTreeWithOverfitting(ds, classifier)
+	tree, _ := decision_tree.BuildTreeWithOverfitting(ds, evaluator, options)
 	trees, alphas, err := tree.GetSubtreesAndAlphas()
 	if err != nil {
 		logrus.Error(err)
 	}
 
-	idx, err := decision_tree.GetAlphaIndexFromCrossValidation(*alphas, ds, classifier)
+	idx, err := decision_tree.GetAlphaIndexFromCrossValidation(*alphas, ds, evaluator, options)
 	if err != nil {
 		logrus.Error(err)
 	}
@@ -101,13 +108,16 @@ func buildBostonDecisionTree() {
 	}
 	logrus.Infof("variance: %v", v)
 
-	classifier := decision_tree.RegressionEvaluator{10}
+	evaluator := decision_tree.RegressionEvaluator{}
+	options := decision_tree.BuildOptions{
+		MinSamplesForSplit: ptr.PointToInt(10),
+	}
 
-	tree, _ := decision_tree.BuildTreeWithOverfitting(ds, classifier)
+	tree, _ := decision_tree.BuildTreeWithOverfitting(ds, evaluator, options)
 	trees, alphas, err := tree.GetSubtreesAndAlphas()
 	logrus.Warn(err)
 
-	idx, err := decision_tree.GetAlphaIndexFromCrossValidation(*alphas, ds, classifier)
+	idx, err := decision_tree.GetAlphaIndexFromCrossValidation(*alphas, ds, evaluator, options)
 	if err != nil {
 		logrus.Error(err)
 	}
@@ -130,7 +140,7 @@ func buildBostonDecisionTree() {
 	// 	logrus.Infof("alpha %v, avg residual %v", (*alphas)[i], totres)
 	// }
 
-	decision_tree.GetAlphaIndexFromCrossValidation(*alphas, ds, classifier)
+	decision_tree.GetAlphaIndexFromCrossValidation(*alphas, ds, evaluator, options)
 }
 
 func main() {

@@ -9,6 +9,11 @@ import (
 	"robertkotcher.me/ML2022/dataset"
 )
 
+type BuildOptions struct {
+	MaxDepth           *int
+	MinSamplesForSplit *int
+}
+
 type DecisionNode struct {
 	Evaluator Evaluator
 	TrainData *dataset.Dataset
@@ -17,16 +22,27 @@ type DecisionNode struct {
 	R         *DecisionNode
 }
 
-func BuildTreeWithOverfitting(ds *dataset.Dataset, evaluator Evaluator) (*DecisionNode, error) {
+// BuildTreeWithOverfitting turns a dataset and its evaluator into a decision tree, returning the
+// root node. The depth is initially set to 1. A tree with depth 1 will consist of just the root.
+func BuildTreeWithOverfitting(ds *dataset.Dataset, evaluator Evaluator, options BuildOptions) (*DecisionNode, error) {
+	return buildTreeWithOverfitting(ds, evaluator, options, 1)
+}
+
+// buildTreeWithOverfitting is a private BuildTreeWithOverfitting that includes current depth info
+func buildTreeWithOverfitting(ds *dataset.Dataset, evaluator Evaluator, options BuildOptions, depth int) (*DecisionNode, error) {
 	if ds.Size() == 0 {
 		return nil, fmt.Errorf("cannot initialize a decision tree node without data")
 	}
 
 	outNode := DecisionNode{Evaluator: evaluator, TrainData: ds}
 
-	// check to see if we have too few leaves to split in this node. this is one way to prevent
-	// over-fitting
-	if ds.Size() < evaluator.GetMinSamplesForSplit() {
+	// if user has provided a max depth and we've hit that max, just return the node without partitioning
+	if options.MaxDepth != nil && depth < *(options.MaxDepth) {
+		return &outNode, nil
+	}
+
+	// check to see if we have too few leaves to split in this node. this is one way to prevent over-fitting
+	if options.MinSamplesForSplit != nil && ds.Size() < *(options.MinSamplesForSplit) {
 		return &outNode, nil
 	}
 
@@ -64,14 +80,14 @@ func BuildTreeWithOverfitting(ds *dataset.Dataset, evaluator Evaluator) (*Decisi
 	outNode.Partition = bestPartition
 
 	// the Right subtree is built from True partition
-	r, err := BuildTreeWithOverfitting(bestPartition.True, evaluator)
+	r, err := buildTreeWithOverfitting(bestPartition.True, evaluator, options, depth+1)
 	if err != nil {
 		return nil, err
 	}
 	outNode.R = r
 
 	// the Left subtree is built from False partition
-	l, err := BuildTreeWithOverfitting(bestPartition.False, evaluator)
+	l, err := buildTreeWithOverfitting(bestPartition.False, evaluator, options, depth+1)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +102,7 @@ func BuildTreeWithOverfitting(ds *dataset.Dataset, evaluator Evaluator) (*Decisi
 // which alpha it's closet to in the incoming 'alphas' slice, returning the index. This index
 // can be used to select a tree constructed from _all_ of the training data, pruned with
 // cost-complexity pruning.
-func GetAlphaIndexFromCrossValidation(alphas []float64, ds *dataset.Dataset, evaluator Evaluator) (*int, error) {
+func GetAlphaIndexFromCrossValidation(alphas []float64, ds *dataset.Dataset, evaluator Evaluator, options BuildOptions) (*int, error) {
 	ds.Shuffle()
 
 	// (1) build trainsets, testsets - each has 10 items
@@ -100,7 +116,7 @@ func GetAlphaIndexFromCrossValidation(alphas []float64, ds *dataset.Dataset, eva
 		testset := testsets[i]
 
 		// build tree with training set
-		tree, _ := BuildTreeWithOverfitting(&trainset, evaluator)
+		tree, _ := BuildTreeWithOverfitting(&trainset, evaluator, options)
 		subtrees, alphas, err := tree.GetSubtreesAndAlphas()
 		if err != nil {
 			return nil, err

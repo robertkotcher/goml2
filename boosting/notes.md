@@ -1,3 +1,7 @@
+# TODO
+
+- [x] implement max depth in decision trees
+
 # gradient boosting for regression
 
 We have a series of h's that together make a good prediction. Assume we already have a function F that is better than random. Then we want to find F(x1) + h(x1) = y1, where y1 is the actual target.

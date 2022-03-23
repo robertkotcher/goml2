@@ -7,9 +7,6 @@ import (
 )
 
 type Evaluator interface {
-	// GetMinSamplesForSplit returns the number of data points that stops the algorithm from
-	// creating child branches
-	GetMinSamplesForSplit() int
 	// Eval takes the initial dataset and a partition, and outputs a score representing how
 	// well the partition "un-mixes" the data, it's "purity"
 	EvaluateSplit(dataset *dataset.Dataset, partition *dataset.Partition) (*float64, error)
@@ -26,13 +23,6 @@ type Evaluator interface {
 
 // RegressionEvaluator helps us build a regression tree with continuous data
 type RegressionEvaluator struct {
-	MinSamplesForSplit int
-}
-
-// GetMinSamplesForSplit returns the number of data points that stops the algorithm from
-// creating child branches
-func (r RegressionEvaluator) GetMinSamplesForSplit() int {
-	return r.MinSamplesForSplit
 }
 
 // EvaluateSplit evaluates the current regression split by taking the sum of squared residuals
@@ -95,13 +85,6 @@ func (r RegressionEvaluator) IsBetter(newScore, oldScore float64) bool {
 
 // ClassificationEvaluator helps us build a decision tree for classification
 type ClassificationEvaluator struct {
-	MinSamplesForSplit int
-}
-
-// GetMinSamplesForSplit returns the number of data points that stops the algorithm from
-// creating child branches
-func (c ClassificationEvaluator) GetMinSamplesForSplit() int {
-	return c.MinSamplesForSplit
 }
 
 // EvaluateSplit for classification currently only supports information gain metric. An InfoGain of 1
